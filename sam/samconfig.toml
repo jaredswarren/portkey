@@ -1,0 +1,10 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "portkey-app"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-tkyvv5ma0jqa"
+s3_prefix = "portkey-app"
+region = "us-east-1"
+profile = "Admin"
+capabilities = "CAPABILITY_IAM"
