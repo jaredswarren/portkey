@@ -18,12 +18,30 @@ import DialogContent from "@material-ui/core/DialogContent"
 import DialogContentText from "@material-ui/core/DialogContentText"
 import DialogActions from "@material-ui/core/DialogActions"
 import TextField from "@material-ui/core/TextField"
+import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
+import { AttributeType, CognitoIdentityProviderClient, SignUpCommand } from "@aws-sdk/client-cognito-identity-provider";
 
 function App() {
+  const AWS_REGION = "us-east-1"
+  const AWS_COGNITO_USER_POOL_ID = "us-east-1_iGJsO2gQ1"
+  const AWS_COGNITO_APP_ID = "t1g6v4psd4b0u7ft9jfoff407"
+
+  const cognitoConfig = {}
+  cognitoConfig.region = AWS_REGION
+
+  const poolData = {
+    UserPoolId: process.env.AWS_COGNITO_USER_POOL_ID,
+    ClientId: process.env.AWS_COGNITO_APP_ID
+  };
+
   const [anchorEl, setMainMenuAnchorEl] = React.useState(null);
   const [markDialogAnchorEl, setMarkDialogAnchorEl] = React.useState(null);
   const [loginDialogAnchorEl, setLoginDialogAnchorEl] = React.useState(null);
   const [signupDialogAnchorEl, setSignupDialogAnchorEl] = React.useState(null);
+  const [signupUsername, setSignupUsername] = React.useState(null);
+  const [signupEmail, setSignupEmail] = React.useState(null);
+  const [signupPassword, setSignupPassword] = React.useState(null);
+
 
   const handleClickMainMenu = (event) => {
     setMainMenuAnchorEl(event.currentTarget);
@@ -48,18 +66,57 @@ function App() {
   }
 
   const handleSignupDialogOpen = (event) => {
+    setSignupUsername(null)
+    setSignupPassword(null)
+    setSignupEmail(null)
     setMainMenuAnchorEl(null)
     setSignupDialogAnchorEl(event.currentTarget)
   }
 
-  const handleSignupDialogSignup = (event) => {
+  async function executeSignup(event) {
+    // async/await.
+    const cognitoIdpClient = new CognitoIdentityProviderClient(cognitoConfig)
+    const signup = {}
+    signup.Username = signupUsername
+    signup.Password = signupPassword
+
+    const userAttributes = []
+
+    const attr = {
+      Name: 'email',
+      Value: signupEmail
+    }
+
+    userAttributes.push(attr)
+
+    signup.UserAttributes = userAttributes
+    signup.ClientId = AWS_COGNITO_APP_ID
+    const command = new SignUpCommand(signup)
+    try {
+      const data = await cognitoIdpClient.send(command);
+      console.log("Signup attempt complete")
+      console.log(data)
+    } catch (error) {
+      console.log("Error while executing signup.")
+      console.log(error)
+    } finally {
+      // finally.
+    }
     setSignupDialogAnchorEl(null)
   }
 
+  const handleSignupDialogSignup = (event) => {
+    executeSignup(event)
+  }
+
   const handleSignupDialogCancel = (event) => {
+    setSignupUsername(null)
+    setSignupPassword(null)
+    setSignupEmail(null)
+    setMainMenuAnchorEl(null)
     setSignupDialogAnchorEl(null)
   }
-  
+
   const handleSignupDialogClose = (event) => {
     setSignupDialogAnchorEl(null)
   }
@@ -120,23 +177,30 @@ function App() {
           <DialogContentText>
             Please provide your email address, password, and a username that will be visible to those who follow your portkey marks.
           </DialogContentText>
-          <TextField 
+          <TextField
             autoFocus
+            value={signupEmail}
+            onChange={(e) => setSignupEmail(e.target.value)}
             margin="dense"
             id="signupEmailField"
             label="Email Address"
-            fullWidth/>
-          <TextField 
+            type="email"
+            fullWidth />
+          <TextField
+            value={signupPassword}
+            onChange={(e) => setSignupPassword(e.target.value)}
             margin="dense"
             id="signupPasswordField"
             label="Password"
             type="password"
-            fullWidth/>
-          <TextField 
+            fullWidth />
+          <TextField
+            value={signupUsername}
+            onChange={(e) => setSignupUsername(e.target.value)}
             margin="dense"
             id="signupUsernameField"
             label="Username"
-            fullWidth/>
+            fullWidth />
         </DialogContent>
         <DialogActions>
           <Button onClick={handleSignupDialogSignup} color="primary">Signup</Button>
