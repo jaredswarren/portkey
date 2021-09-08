@@ -19,7 +19,9 @@ import DialogContentText from "@material-ui/core/DialogContentText"
 import DialogActions from "@material-ui/core/DialogActions"
 import TextField from "@material-ui/core/TextField"
 import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
-import { AttributeType, CognitoIdentityProviderClient, SignUpCommand } from "@aws-sdk/client-cognito-identity-provider";
+import { AttributeType, CognitoIdentityProviderClient, InitiateAuthCommand, SignUpCommand } from "@aws-sdk/client-cognito-identity-provider";
+import AccountCircle from '@material-ui/icons/AccountCircle';
+
 
 function App() {
   const AWS_REGION = "us-east-1"
@@ -44,7 +46,14 @@ function App() {
   const [messageDialogText, setMessageDialogText] = React.useState(null);
   const [loginUsername, setLoginUsername] = React.useState(null);
   const [loginPassword, setLoginPassword] = React.useState(null);
+  const [profileMenuOpen, setProfileMenuOpen] = React.useState(null);
 
+  var accessToken = null;
+  var idToken = null;
+  var refreshToken = null;
+  var accessTokenExpirationTime = null;
+  var deviceGroupKey = null;
+  var deviceKey = null;
 
   const handleClickMainMenu = (event) => {
     setMainMenuAnchorEl(event.currentTarget);
@@ -128,6 +137,55 @@ function App() {
     setSignupDialogAnchorEl(null)
   }
 
+  async function executeLoginAttempt(event) {
+    const cognitoIdpClient = new CognitoIdentityProviderClient(cognitoConfig)
+    let username = loginUsername
+    let password = loginPassword
+    let input = {
+      AuthFlow: "USER_PASSWORD_AUTH",
+      AuthParameters: {
+        USERNAME: username,
+        PASSWORD: password
+      },
+      ClientId: AWS_COGNITO_APP_ID
+    }
+    try {
+      const command = new InitiateAuthCommand(input)
+      const data = await cognitoIdpClient.send(command);
+      console.log("Login attempt complete")
+      console.log(data)
+      let loginStatusCode = data.$metadata.httpStatusCode
+      if (loginStatusCode != 200) {
+        setMessageDialogText("Unexpected response during authentication.")
+        setLoginDialogAnchorEl(null)
+        return
+      }
+      accessToken = data.AuthenticationResult.AccessToken
+      idToken = data.AuthenticationResult.IdToken
+      refreshToken = data.AuthenticationResult.RefreshToken
+      deviceGroupKey = data.AuthenticationResult.NewDeviceMetadata.DeviceGroupKey
+      deviceKey = data.AuthenticationResult.NewDeviceMetadata.DeviceKey
+      accessTokenExpirationTime = data.AuthenticationResult.ExpiresIn + (new Date().getTime() / 1000);
+
+    } catch (error) {
+      console.log("Error handling login attempt")
+      console.log(error)
+      if (error.name == "UserNotConfirmedException") {
+        setLoginDialogAnchorEl(null)
+        setMessageDialogText("Your user has not been verified.")
+      } else if (error.name == "NotAuthorizedException") {
+        setLoginDialogAnchorEl(null)
+        setMessageDialogText(error.message)
+      } else {
+        setLoginDialogAnchorEl(null)
+        setMessageDialogText(error.message)
+      }
+
+    } finally {
+      //finally.
+    }
+  }
+
   const handleMessageDialogClose = (event) => {
     setMessageDialogText(null)
   }
@@ -154,6 +212,7 @@ function App() {
   }
 
   const handleLoginDialogLogin = (event) => {
+    executeLoginAttempt(event)
     setMainMenuAnchorEl(null)
     setLoginDialogAnchorEl(null)
   }
@@ -161,6 +220,22 @@ function App() {
   const handleLoginDialogClose = (event) => {
     setMainMenuAnchorEl(null)
     setLoginDialogAnchorEl(null)
+  }
+
+  const handleProfileMenuOpen = (event) => {
+
+  }
+
+  const handleProfileMenuClose = (event) => {
+
+  }
+
+  const handleProfileDialogOpen = (event) => {
+
+  }
+
+  const handleMyAccountDialogOpen = (event) => {
+
   }
 
 
@@ -174,6 +249,35 @@ function App() {
           <Typography variant="h6" >
             portkey.to
           </Typography>
+          <div>
+          <IconButton
+            aria-label="account of current user"
+            aria-controls="profile-menu"
+            aria-haspopup="true"
+            onClick={handleProfileMenuOpen}
+            color="inherit"
+          >
+          <AccountCircle />
+          </IconButton>
+          <Menu
+            id="profile-menu"
+            anchorEl={anchorEl}
+            anchorOrigin={{
+              vertical: 'top',
+              horizontal: 'right',
+            }}
+            keepMounted
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: 'right',
+            }}
+            open={profileMenuOpen}
+            onClose={handleProfileMenuClose}
+          >
+            <MenuItem onClick={handleProfileDialogOpen}>Profile</MenuItem>
+            <MenuItem onClick={handleMyAccountDialogOpen}>My account</MenuItem>
+          </Menu>
+          </div>
         </Toolbar>
       </AppBar>
       <Menu id="main-menu"
@@ -215,7 +319,7 @@ function App() {
         </DialogActions>
       </Dialog>
       <Dialog onClose={handleSignupDialogClose} open={Boolean(signupDialogAnchorEl)}>
-        <DialogTitle id="singupDialogTitle">Signup for portkey.to</DialogTitle>
+        <DialogTitle id="messageDialogTitle">Signup for portkey.to</DialogTitle>
         <DialogContent>
           <DialogContentText>
             Please provide your email address, password, and a username that will be visible to users of the site.
@@ -251,7 +355,6 @@ function App() {
         </DialogActions>
       </Dialog>
       <Dialog onClose={handleMessageDialogClose} open={Boolean(messageDialogText)}>
-        <DialogTitle id="messageDialogTitle">Signup for portkey.to</DialogTitle>
         <DialogContent>
           <DialogContentText>
             {messageDialogText}
