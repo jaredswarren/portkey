@@ -19,15 +19,15 @@ import DialogContentText from "@material-ui/core/DialogContentText"
 import DialogActions from "@material-ui/core/DialogActions"
 import TextField from "@material-ui/core/TextField"
 import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
-import { AttributeType, CognitoIdentityProviderClient, InitiateAuthCommand, SignUpCommand, ChangePasswordCommand, RespondToAuthChallengeCommand } from "@aws-sdk/client-cognito-identity-provider";
+import { AttributeType, CognitoIdentityProviderClient, InitiateAuthCommand, SignUpCommand, ChangePasswordCommand, RespondToAuthChallengeCommand, ConfirmSignUpCommand } from "@aws-sdk/client-cognito-identity-provider";
 import AccountCircle from '@material-ui/icons/AccountCircle';
 
 var sessionIdForCognitoChallenge = null;
 var accessToken = null;
 var refreshToken = null;
 var accessTokenExpirationTime = null;
-var deviceGroupKey = null;
-var deviceKey = null;
+var confirmAccountConfirmationCode = null;
+var confirmAccountUsername = null;
 
 function App() {
   const AWS_REGION = "us-east-1"
@@ -133,10 +133,13 @@ function App() {
       if (error.name == "UsernameExistsException") {
         setSignupDialogAnchorEl(null)
         setMessageDialogText(error.message)
+        return
       }
     } finally {
       // finally.
     }
+    confirmAccountUsername = signupEmail
+    confirmAccountConfirmationCode = confirmAccountCode
     setSignupDialogAnchorEl(null)
     setConfirmAccountDialogAnchorEl(true)
   }
@@ -174,8 +177,6 @@ function App() {
       accessToken = data.AuthenticationResult.AccessToken
       setIdToken(data.AuthenticationResult.IdToken)
       refreshToken = data.AuthenticationResult.RefreshToken
-      deviceGroupKey = data.AuthenticationResult.NewDeviceMetadata.DeviceGroupKey
-      deviceKey = data.AuthenticationResult.NewDeviceMetadata.DeviceKey
       accessTokenExpirationTime = data.AuthenticationResult.ExpiresIn + (new Date().getTime() / 1000);
     } catch (error) {
       console.log("Error handling login attempt")
@@ -268,15 +269,42 @@ function App() {
   }
 
   const handleConfirmAccountDialogClose = () => {
-
+    setConfirmAccountDialogAnchorEl(null)
   }
 
   const handleConfirmAccountDialogCancel = () => {
 
   }
 
-  const handleConfirmAccountDialogConfirm = () => {
+  const handleAccountIconClick = (event) => {
+    console.log("Pool")
+    console.log(AWS_COGNITO_USER_POOL_ID)
+    console.log("Access")
+    console.log(accessToken)
+    console.log("Refresh")
+    console.log(refreshToken)
+    console.log("Expire Time")
+    console.log(accessTokenExpirationTime)
+    console.log("Now")
+    console.log(new Date().getTime() / 1000)
+  }
 
+  async function handleConfirmAccountDialogConfirm () {
+    const client = new CognitoIdentityProviderClient(cognitoConfig);
+    const input = {
+      ClientId: AWS_COGNITO_APP_ID,
+      ConfirmationCode: confirmAccountCode,
+      Username: confirmAccountUsername
+    }
+    console.log("Confirmation input: "+input)
+    const command = new ConfirmSignUpCommand(input)
+    const response = await client.send(command)
+    console.log("Confirm response: ")
+    console.log(response)
+    if (response.$metadata.httpStatusCode == 200) {
+      handleConfirmAccountDialogClose()
+      setMessageDialogText("Account "+confirmAccountUsername+" verified. Please Login.")
+    }
   }
 
   
@@ -320,7 +348,7 @@ function App() {
             onClick={handleProfileMenuOpen}
             color="inherit"
           >
-          {idToken && <AccountCircle />}
+          {idToken && <AccountCircle onClick={handleAccountIconClick}/>}
           </IconButton>
           <Menu
             id="profile-menu"
@@ -385,7 +413,7 @@ function App() {
         <DialogTitle id="messageDialogTitle">Signup for portkey.to</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Please provide your email address, password, and a username that will be visible to users of the site.
+            Please provide your email address and a password.
           </DialogContentText>
           <TextField
             autoFocus
@@ -492,7 +520,7 @@ function App() {
             onChange={(e) => setConfirmAccountCode(e.target.value)}
             margin="dense"
             id="changePasswordUsernameField"
-            label="Email"
+            label="Verification Code"
             fullWidth />
         </DialogContent>
         <DialogActions>

@@ -80,6 +80,8 @@ Resources:
             Path: /destination/{mark}
             RestApiId: !Ref PortkeyApi
             Method: put
+            Auth:
+              Authorizer: CognitoAuthorizer
   GetDestinationFunction:
     Type: AWS::Serverless::Function
     Properties:
