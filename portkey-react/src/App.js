@@ -19,14 +19,20 @@ import DialogContentText from "@material-ui/core/DialogContentText"
 import DialogActions from "@material-ui/core/DialogActions"
 import TextField from "@material-ui/core/TextField"
 import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
-import { AttributeType, CognitoIdentityProviderClient, InitiateAuthCommand, SignUpCommand } from "@aws-sdk/client-cognito-identity-provider";
+import { AttributeType, CognitoIdentityProviderClient, InitiateAuthCommand, SignUpCommand, ChangePasswordCommand, RespondToAuthChallengeCommand } from "@aws-sdk/client-cognito-identity-provider";
 import AccountCircle from '@material-ui/icons/AccountCircle';
 
+var sessionIdForCognitoChallenge = null;
+var accessToken = null;
+var refreshToken = null;
+var accessTokenExpirationTime = null;
+var deviceGroupKey = null;
+var deviceKey = null;
 
 function App() {
   const AWS_REGION = "us-east-1"
-  const AWS_COGNITO_USER_POOL_ID = "us-east-1_iGJsO2gQ1"
-  const AWS_COGNITO_APP_ID = "t1g6v4psd4b0u7ft9jfoff407"
+  const AWS_COGNITO_USER_POOL_ID = "us-east-1_blKdYdznc"
+  const AWS_COGNITO_APP_ID = "rco0a3i0e78skgvltllm0757m"
 
   const cognitoConfig = {}
   cognitoConfig.region = AWS_REGION
@@ -40,20 +46,19 @@ function App() {
   const [markDialogAnchorEl, setMarkDialogAnchorEl] = React.useState(null);
   const [loginDialogAnchorEl, setLoginDialogAnchorEl] = React.useState(null);
   const [signupDialogAnchorEl, setSignupDialogAnchorEl] = React.useState(null);
-  const [signupUsername, setSignupUsername] = React.useState(null);
   const [signupEmail, setSignupEmail] = React.useState(null);
   const [signupPassword, setSignupPassword] = React.useState(null);
   const [messageDialogText, setMessageDialogText] = React.useState(null);
   const [loginUsername, setLoginUsername] = React.useState(null);
   const [loginPassword, setLoginPassword] = React.useState(null);
   const [profileMenuOpen, setProfileMenuOpen] = React.useState(null);
-
-  var accessToken = null;
-  var idToken = null;
-  var refreshToken = null;
-  var accessTokenExpirationTime = null;
-  var deviceGroupKey = null;
-  var deviceKey = null;
+  const [idToken, setIdToken] = React.useState(null);
+  const [changePasswordAnchorEl, setChangePasswordAnchorEl] = React.useState(null);
+  const [changePasswordUsername, setChangePasswordUsername] = React.useState(null);
+  const [changePassword, setChangePassword] = React.useState(null);
+  const [changePasswordVerify, setChangePasswordVerify] = React.useState(null);
+  const [confirmAccountCode, setConfirmAccountCode] = React.useState(null);
+  const [confirmAccountDialogAnchorEl, setConfirmAccountDialogAnchorEl] = React.useState(null);
 
   const handleClickMainMenu = (event) => {
     setMainMenuAnchorEl(event.currentTarget);
@@ -78,7 +83,6 @@ function App() {
   }
 
   const handleSignupDialogOpen = (event) => {
-    setSignupUsername(null)
     setSignupPassword(null)
     setSignupEmail(null)
     setMainMenuAnchorEl(null)
@@ -89,9 +93,8 @@ function App() {
     // async/await.
     const cognitoIdpClient = new CognitoIdentityProviderClient(cognitoConfig)
     const signup = {}
-    signup.Username = signupUsername
     signup.Password = signupPassword
-
+    signup.Username = signupEmail
     const userAttributes = []
 
     const attr = {
@@ -135,6 +138,7 @@ function App() {
       // finally.
     }
     setSignupDialogAnchorEl(null)
+    setConfirmAccountDialogAnchorEl(true)
   }
 
   async function executeLoginAttempt(event) {
@@ -160,27 +164,29 @@ function App() {
         setLoginDialogAnchorEl(null)
         return
       }
+      if ('ChallengeName' in data && data.ChallengeName == "NEW_PASSWORD_REQUIRED") {
+        console.log("Password Change Required")
+        sessionIdForCognitoChallenge = data.Session
+        console.log("Session ID: "+sessionIdForCognitoChallenge)
+        handleChangePasswordDialogOpen()
+        return
+      }
       accessToken = data.AuthenticationResult.AccessToken
-      idToken = data.AuthenticationResult.IdToken
+      setIdToken(data.AuthenticationResult.IdToken)
       refreshToken = data.AuthenticationResult.RefreshToken
       deviceGroupKey = data.AuthenticationResult.NewDeviceMetadata.DeviceGroupKey
       deviceKey = data.AuthenticationResult.NewDeviceMetadata.DeviceKey
       accessTokenExpirationTime = data.AuthenticationResult.ExpiresIn + (new Date().getTime() / 1000);
-
     } catch (error) {
       console.log("Error handling login attempt")
       console.log(error)
       if (error.name == "UserNotConfirmedException") {
-        setLoginDialogAnchorEl(null)
         setMessageDialogText("Your user has not been verified.")
       } else if (error.name == "NotAuthorizedException") {
-        setLoginDialogAnchorEl(null)
         setMessageDialogText(error.message)
       } else {
-        setLoginDialogAnchorEl(null)
         setMessageDialogText(error.message)
       }
-
     } finally {
       //finally.
     }
@@ -191,7 +197,6 @@ function App() {
   }
 
   const handleSignupDialogCancel = (event) => {
-    setSignupUsername(null)
     setSignupPassword(null)
     setSignupEmail(null)
     setMainMenuAnchorEl(null)
@@ -207,19 +212,31 @@ function App() {
   }
 
   const handleLoginDialogCancel = (event) => {
+    setLoginUsername(null)
+    setLoginPassword(null)
     setMainMenuAnchorEl(null)
     setLoginDialogAnchorEl(null)
   }
 
   const handleLoginDialogLogin = (event) => {
-    executeLoginAttempt(event)
+    if(executeLoginAttempt(event)) {
+      setLoginUsername(null)
+      setLoginPassword(null)
+      setMainMenuAnchorEl(null)
+      setLoginDialogAnchorEl(null)
+    }
+    
+  }
+
+  const handleLoginDialogClose = (event) => {
+    setLoginPassword(null)
+    setLoginUsername(null)
     setMainMenuAnchorEl(null)
     setLoginDialogAnchorEl(null)
   }
 
-  const handleLoginDialogClose = (event) => {
-    setMainMenuAnchorEl(null)
-    setLoginDialogAnchorEl(null)
+  const handleChangePasswordDialogOpen = () => {
+    setChangePasswordAnchorEl(true)
   }
 
   const handleProfileMenuOpen = (event) => {
@@ -238,6 +255,52 @@ function App() {
 
   }
 
+  const handleChangePasswordDialogConfirm = (event) => {
+    executePasswordChange()
+  }
+
+  const handleChangePasswordDialogCancel = (event) => {
+    handleChangePasswordDialogClose(event)
+  }
+
+  const handleChangePasswordDialogClose = (event) => {
+    setChangePasswordAnchorEl(null)
+  }
+
+  const handleConfirmAccountDialogClose = () => {
+
+  }
+
+  const handleConfirmAccountDialogCancel = () => {
+
+  }
+
+  const handleConfirmAccountDialogConfirm = () => {
+
+  }
+
+  
+
+  async function executePasswordChange () {
+    
+    let username = changePasswordUsername
+    let newPassword = changePassword
+    let sessionId = sessionIdForCognitoChallenge
+    console.log("Session for password change: "+sessionId)
+    const cognitoIdpClient = new CognitoIdentityProviderClient(cognitoConfig)
+    const input = {
+      ChallengeName: "NEW_PASSWORD_REQUIRED",
+      Session: sessionId,
+      ChallengeResponses: {
+        USERNAME: username,
+        NEW_PASSWORD: newPassword
+      },
+      ClientId: AWS_COGNITO_APP_ID
+    };
+    const command = new RespondToAuthChallengeCommand(input);
+    const response = await cognitoIdpClient.send(command);
+    console.log(response);
+  }
 
   return (
     <Grid container direction="column" justifyContent="center" alignItems="center">
@@ -257,7 +320,7 @@ function App() {
             onClick={handleProfileMenuOpen}
             color="inherit"
           >
-          <AccountCircle />
+          {idToken && <AccountCircle />}
           </IconButton>
           <Menu
             id="profile-menu"
@@ -325,11 +388,13 @@ function App() {
             Please provide your email address, password, and a username that will be visible to users of the site.
           </DialogContentText>
           <TextField
-            value={signupUsername}
-            onChange={(e) => setSignupUsername(e.target.value)}
+            autoFocus
+            value={signupEmail}
+            onChange={(e) => setSignupEmail(e.target.value)}
             margin="dense"
-            id="signupUsernameField"
-            label="Username"
+            id="signupEmailField"
+            label="Email Address"
+            type="email"
             fullWidth />
           <TextField
             value={signupPassword}
@@ -338,15 +403,6 @@ function App() {
             id="signupPasswordField"
             label="Password"
             type="password"
-            fullWidth />
-          <TextField
-            autoFocus
-            value={signupEmail}
-            onChange={(e) => setSignupEmail(e.target.value)}
-            margin="dense"
-            id="signupEmailField"
-            label="Email Address"
-            type="email"
             fullWidth />
         </DialogContent>
         <DialogActions>
@@ -386,6 +442,62 @@ function App() {
         <DialogActions>
           <Button onClick={handleLoginDialogLogin} color="primary">Login</Button>
           <Button onClick={handleLoginDialogCancel} color="primary">Cancel</Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog onClose={handleChangePasswordDialogClose} open={Boolean(changePasswordAnchorEl)}>
+        <DialogTitle id="messageDialogTitle">Reset Password</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Please provide your email address and a new password.
+          </DialogContentText>
+          <TextField
+            autoFocus
+            value={changePasswordUsername}
+            onChange={(e) => setChangePasswordUsername(e.target.value)}
+            margin="dense"
+            id="changePasswordUsernameField"
+            label="Email"
+            fullWidth />
+          <TextField
+            value={changePassword}
+            onChange={(e) => setChangePassword(e.target.value)}
+            margin="dense"
+            id="changePassword"
+            label="New Password"
+            type="password"
+            fullWidth />
+          <TextField
+            value={changePasswordVerify}
+            onChange={(e) => setChangePasswordVerify(e.target.value)}
+            margin="dense"
+            id="changePasswordVerification"
+            label="Verify New Password"
+            type="password"
+            fullWidth />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleChangePasswordDialogConfirm} color="primary">Ok</Button>
+          <Button onClick={handleChangePasswordDialogCancel} color="primary">Cancel</Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog onClose={handleConfirmAccountDialogClose} open={Boolean(confirmAccountDialogAnchorEl)}>
+        <DialogTitle id="messageDialogTitle">Confirm Your Account</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Please provide the code sent to your email address.
+          </DialogContentText>
+          <TextField
+            autoFocus
+            value={confirmAccountCode}
+            onChange={(e) => setConfirmAccountCode(e.target.value)}
+            margin="dense"
+            id="changePasswordUsernameField"
+            label="Email"
+            fullWidth />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleConfirmAccountDialogConfirm} color="primary">Ok</Button>
+          <Button onClick={handleConfirmAccountDialogCancel} color="primary">Cancel</Button>
         </DialogActions>
       </Dialog>
     </Grid>
