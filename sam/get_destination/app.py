@@ -18,7 +18,8 @@ def build_return(code, message, url=None):
             "statusCode": code,
             "body": '{"message": "'+ message+'"}',
             "headers": {
-                "Location": url
+                "Location": url,
+                "Cache-Control": "no-store, no-cache, must-revalidate, post-check=0, pre-check=0"
             }
         }
 

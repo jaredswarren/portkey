@@ -22,12 +22,37 @@ import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
 import { AttributeType, CognitoIdentityProviderClient, InitiateAuthCommand, SignUpCommand, ChangePasswordCommand, RespondToAuthChallengeCommand, ConfirmSignUpCommand } from "@aws-sdk/client-cognito-identity-provider";
 import AccountCircle from '@material-ui/icons/AccountCircle';
 
+const axios = require('axios').default;
+
 var sessionIdForCognitoChallenge = null;
 var accessToken = null;
 var refreshToken = null;
 var accessTokenExpirationTime = null;
 var confirmAccountConfirmationCode = null;
 var confirmAccountUsername = null;
+
+const APIGW = 'https://gco7tzamu1.execute-api.us-east-1.amazonaws.com/prod'
+
+async function sayHello() {
+  const data = await axios.get(APIGW+"/hello");
+  console.log(data)
+  return data;
+}
+
+async function executeAddMark(portkey, destination, idToken, setErrorMessage) {
+  setErrorMessage(null)
+  try {
+    console.log("Preparing to add portkey.")
+    const data = await axios.put(APIGW+"/destination/"+portkey, {"mark": portkey, "destination": destination}, {headers: {"Authorization": idToken}})
+    console.log(data)
+    return data
+  }
+  catch(err) {
+    console.log(err)
+    setErrorMessage(err.response.data.message)
+    return null;   
+  }
+}
 
 function App() {
   const AWS_REGION = "us-east-1"
@@ -59,6 +84,9 @@ function App() {
   const [changePasswordVerify, setChangePasswordVerify] = React.useState(null);
   const [confirmAccountCode, setConfirmAccountCode] = React.useState(null);
   const [confirmAccountDialogAnchorEl, setConfirmAccountDialogAnchorEl] = React.useState(null);
+  const [addPortkeyDialogPortkey, setAddPortkeyDialogPortkey] = React.useState(null);
+  const [addPortkeyDialogDestination, setAddPortkeyDialogDestination] = React.useState(null);
+  const [addPortkeyDialogPortkeyFieldErrorText, setAddPortkeyDialogPortkeyFieldErrorText] = React.useState(null)
 
   const handleClickMainMenu = (event) => {
     setMainMenuAnchorEl(event.currentTarget);
@@ -76,6 +104,10 @@ function App() {
   const handleMarkDialogClose = (event) => {
     setMarkDialogAnchorEl(null)
   };
+
+  const handleMarkDialogAdd = (event) => {
+    executeAddMark(addPortkeyDialogPortkey, addPortkeyDialogDestination, idToken, setAddPortkeyDialogPortkeyFieldErrorText)
+  }
 
   const handleLoginDialogOpen = (event) => {
     setMainMenuAnchorEl(null)
@@ -276,6 +308,13 @@ function App() {
 
   }
 
+  const handleSignout = (event) => {
+    setIdToken(null)
+    accessToken = null;
+    refreshToken = null;
+    accessTokenExpirationTime = null;
+  }
+
   const handleAccountIconClick = (event) => {
     console.log("Pool")
     console.log(AWS_COGNITO_USER_POOL_ID)
@@ -287,6 +326,8 @@ function App() {
     console.log(accessTokenExpirationTime)
     console.log("Now")
     console.log(new Date().getTime() / 1000)
+    const hi = sayHello()
+    console.log(hi)
   }
 
   async function handleConfirmAccountDialogConfirm () {
@@ -306,8 +347,6 @@ function App() {
       setMessageDialogText("Account "+confirmAccountUsername+" verified. Please Login.")
     }
   }
-
-  
 
   async function executePasswordChange () {
     
@@ -376,24 +415,41 @@ function App() {
         keepMounted
         open={Boolean(anchorEl)}
         onClose={handleMainMenuClose}>
-        <MenuItem onClick={handleMarkDialogOpen}>Add Mark</MenuItem>
-        <MenuItem onClick={handleLoginDialogOpen}>Login</MenuItem>
-        <MenuItem onClick={handleSignupDialogOpen}>Sign Up</MenuItem>
+        {idToken && <MenuItem onClick={handleMarkDialogOpen}>Add Portkey</MenuItem>}
+        {!idToken && <MenuItem onClick={handleLoginDialogOpen}>Login</MenuItem>}
+        {!idToken && <MenuItem onClick={handleSignupDialogOpen}>Sign Up</MenuItem>}
+        {idToken && <MenuItem onClick={handleSignout}>Sign Out</MenuItem>}
       </Menu>
+      {!idToken &&
+        <Typography variant="h3">Shorter, memorable links. Login to create a portkey.</Typography>
+      }
+      {!idToken && 
+        <Button variant="contained" onClick={handleLoginDialogOpen}>Login</Button>
+      }
+      {idToken &&
+        <Typography variant="h3">Shorter, memorable links. Create a portkey now!</Typography>
+      }
+      {idToken && 
+        <Button variant="contained" onClick={handleMarkDialogOpen}>Create a Portkey</Button>
+      }
       <Dialog onClose={handleMarkDialogClose} open={Boolean(markDialogAnchorEl)}>
-        <DialogTitle id="addMarkDialogTitle">Add a mark</DialogTitle>
+        <DialogTitle id="addMarkDialogTitle">Add a portkey</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            To add a mark and a destination, fill this out.
+            To add a portkey and a destination, fill this out.
           </DialogContentText>
           <TextField
+            error={addPortkeyDialogPortkeyFieldErrorText !== null}
+            helperText={addPortkeyDialogPortkeyFieldErrorText}
             autoFocus
+            onChange={(e) => setAddPortkeyDialogPortkey(e.target.value)}
             margin="dense"
             id="markField"
             label="Mark"
             fullWidth
           />
           <TextField
+            onChange={(e) => setAddPortkeyDialogDestination(e.target.value)}
             margin="dense"
             id="destinationField"
             label="Destination"
@@ -404,7 +460,7 @@ function App() {
           <Button onClick={handleMarkDialogClose} color="primary">
             Cancel
           </Button>
-          <Button onClick={handleMarkDialogClose} color="primary">
+          <Button onClick={handleMarkDialogAdd} color="primary">
             Add
           </Button>
         </DialogActions>
